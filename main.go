@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	GeositeURL		= "https://gh.jsdelivr.fyi/https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-	GeoIPURL		= "https://gh.jsdelivr.fyi/https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb"
+	GeositeURL		= "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+	GeoIPURL		= "https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb"
 	GeositeInput    = "assets/geosite.dat"
 	GeoIPInput    	= "assets/Country.mmdb"
 	StrategyDir		= "strategy"

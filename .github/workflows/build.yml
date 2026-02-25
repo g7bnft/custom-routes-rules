@@ -35,10 +35,8 @@ jobs:
           name: "Latest Geodata Build"
           body: "Updated on ${{ github.event.head_commit.timestamp || github.run_id }}"
           files: |
-            output/geosite.db
-            output/geosite.dat
-            output/geoip.db
-            output/geoip.dat
+            output/*
+            !output/*.json
           # This forces the release to update if the 'latest' tag already exists
           make_latest: "true"
         env:

@@ -14,6 +14,7 @@ const (
 	GeositeInput    = "assets/geosite.dat"
 	GeoIPInput    	= "assets/Country.mmdb"
 	StrategyDir		= "strategy"
+	AssetsDir		= "assets"
 	OutputDir   	= "output"
 	SingboxDB = OutputDir + "/geosite.db"
 	RayDAT = OutputDir + "/geosite.dat"
@@ -25,6 +26,21 @@ var (
 )
 
 func main() {
+	// Setup Environment
+	fmt.Println("🚀 Starting build process...")
+
+	// FIRST: Remove the old folder if it exists
+	os.RemoveAll(OutputDir)
+	os.RemoveAll(AssetsDir)
+
+	// SECOND: Create a fresh one
+    if err := os.MkdirAll(OutputDir, 0755); err != nil {
+        log.Fatalf("Failed to create output directory: %v", err)
+    }
+	if err := os.MkdirAll(AssetsDir, 0755); err != nil {
+    	log.Fatal("Failed to create assets directory:", err)
+	}
+	
 	// Sync Upstream Files (NEW)
     // We do this first so we have the raw data to work with.
     fmt.Println("🔄 Syncing Upstream Data...")
@@ -32,17 +48,6 @@ func main() {
         log.Fatalf("❌ Sync error: %v", err)
     }
 
-	// Setup Environment
-	fmt.Println("🚀 Starting build process...")
-
-	// FIRST: Remove the old folder if it exists
-	os.RemoveAll(OutputDir)
-
-	// SECOND: Create a fresh one
-    if err := os.MkdirAll(OutputDir, 0755); err != nil {
-        log.Fatalf("Failed to create output directory: %v", err)
-    }
-	
 	// Handle Geosite Logic
 	fmt.Println("🌐 Processing Geosite...")
 	if err := processGeosite(); err != nil {

@@ -2,6 +2,8 @@ name: Build Geo-Assets
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "50 23 */3 * *"
   push:
     branches:
       - main
@@ -41,3 +43,4 @@ jobs:
             output/*.db
             output/*.dat
             output/*.srs
+            output/*.txt

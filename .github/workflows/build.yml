@@ -1,0 +1,45 @@
+name: Build Geo-Assets
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.go'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: # Explicitly grant write access for releases
+      contents: write
+      
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Run Builder
+        run: |
+          go mod tidy
+          go run .
+
+      - name: Release Latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest Geodata Build"
+          body: "Updated on ${{ github.event.head_commit.timestamp || github.run_id }}"
+          files: |
+            output/geosite.db
+            output/geosite.dat
+            output/geoip.db
+            output/geoip.dat
+          # This forces the release to update if the 'latest' tag already exists
+          make_latest: "true"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

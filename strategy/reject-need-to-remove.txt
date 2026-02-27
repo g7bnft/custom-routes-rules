@@ -46,3 +46,5 @@ paypal-m.com
 paypal-metrics.com
 go.dev
 golang.org
+rrcdnbf1.com
+snzypic.vip

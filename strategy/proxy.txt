@@ -43,3 +43,4 @@ paypal-metrics.com
 go.dev
 golang.org
 pki.goog
+recaptcha.net

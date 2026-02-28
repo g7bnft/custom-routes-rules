@@ -96,3 +96,6 @@ bfzy.tv
 ffzy888.com
 renrenshipin.cc
 renren.pro
+apple.com
+apple.map.fastly.net
+apps.mzstatic.com

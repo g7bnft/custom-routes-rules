@@ -1,5 +1,5 @@
 wise.com
-cdn.jsdelivr.net
+jsdelivr.net
 isthesirhk.ml
 thesirtw.tk
 gstatic.com

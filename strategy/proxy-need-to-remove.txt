@@ -99,3 +99,6 @@ renren.pro
 apple.com
 apple.map.fastly.net
 apps.mzstatic.com
+itunes-apple.com.akadns.net
+akamaiedge.net
+apple.com.akadns.net

@@ -127,3 +127,6 @@ apple.com
 apple.map.fastly.net
 apps.mzstatic.com
 recaptcha.net
+itunes-apple.com.akadns.net
+akamaiedge.net
+apple.com.akadns.net

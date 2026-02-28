@@ -42,3 +42,4 @@ paypal-m.com
 paypal-metrics.com
 go.dev
 golang.org
+pki.goog

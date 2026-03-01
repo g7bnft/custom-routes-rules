@@ -130,3 +130,7 @@ recaptcha.net
 itunes-apple.com.akadns.net
 akamaiedge.net
 apple.com.akadns.net
+hyperliquid.xyz
+quiknode.pro
+contentful.com
+monad.xyz

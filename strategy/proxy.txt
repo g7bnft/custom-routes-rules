@@ -44,3 +44,7 @@ go.dev
 golang.org
 pki.goog
 recaptcha.net
+hyperliquid.xyz
+quiknode.pro
+contentful.com
+monad.xyz

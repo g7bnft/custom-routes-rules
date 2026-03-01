@@ -125,7 +125,7 @@ hw-v2-web-player-tracker.biliapi.net
 pki.goog
 apple.com
 apple.map.fastly.net
-apps.mzstatic.com
+mzstatic.com
 recaptcha.net
 itunes-apple.com.akadns.net
 akamaiedge.net

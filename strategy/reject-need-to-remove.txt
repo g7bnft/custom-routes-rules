@@ -63,3 +63,4 @@ renrenshipin.cc
 renren.pro
 pki.goog
 akamaiedge.net
+mzstatic.com

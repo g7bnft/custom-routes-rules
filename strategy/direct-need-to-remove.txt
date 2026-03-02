@@ -134,3 +134,4 @@ hyperliquid.xyz
 quiknode.pro
 contentful.com
 monad.xyz
+app-site-association.cdn-apple.com

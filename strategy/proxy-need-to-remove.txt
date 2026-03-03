@@ -121,3 +121,5 @@ cdn-apple.com
 windowsupdate.com
 bing.com
 icloud.com
+microsoft.com
+gfx.ms

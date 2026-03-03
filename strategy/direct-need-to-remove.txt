@@ -137,3 +137,4 @@ monad.xyz
 cdn-apple.com
 windowsupdate.com
 bing.com
+icloud.com

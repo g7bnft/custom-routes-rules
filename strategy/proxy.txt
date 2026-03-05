@@ -48,3 +48,4 @@ hyperliquid.xyz
 quiknode.pro
 contentful.com
 monad.xyz
+telephony.goog

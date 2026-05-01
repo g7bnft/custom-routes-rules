@@ -84,3 +84,4 @@ ksyuncdn.com
 contentful.com
 monad.xyz
 branch.io
+a.hcaptcha.com

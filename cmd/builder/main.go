@@ -6,17 +6,16 @@ import (
 	"os"
 
 	"custom-rules/internal/config"
-
-	"custom-rules/internal/pipeline"
-	"custom-rules/internal/sync"
-	"custom-rules/internal/strategy"
-	"custom-rules/internal/geosite"
 	"custom-rules/internal/geoip"
+	"custom-rules/internal/geosite"
+	"custom-rules/internal/pipeline"
+	"custom-rules/internal/strategy"
+	"custom-rules/internal/sync"
+	"custom-rules/internal/types"
 	"custom-rules/internal/verify"
 )
 
-
-func main()  {
+func main() {
 	fmt.Println("Starting build process...")
 
 	// 1. Setup Config
@@ -49,7 +48,11 @@ func main()  {
 	p.AddStage(geoip.NewGeoipStage())
 	p.AddStage(verify.NewVerifyStage())
 
+	// 5. Run
+	ctx := &types.BuildContext{Config: cfg}
+	if err := p.Run(ctx); err != nil {
+		log.Fatalf("❌ Build failed: %v", err)
+	}
 
-
-
+	fmt.Println("✨ Build Complete! Files available in:", cfg.OutputDir)
 }

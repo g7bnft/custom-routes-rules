@@ -1,7 +1,7 @@
 package geoip
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -96,11 +96,11 @@ func exportIPRuleSets(result *types.GeoIPResult, outputDir string) error {
 		srs.Write(sf, ruleSet, 1)
 		sf.Close()
 
-		jf, _ := os.Create(filepath.Join(outputDir, "geoip-"+code+".json"))
-		enc := json.NewEncoder(jf)
-		enc.SetIndent("", " ")
-		enc.Encode(ruleSet)
-		jf.Close()
+		// jf, _ := os.Create(filepath.Join(outputDir, "geoip-"+code+".json"))
+		// enc := json.NewEncoder(jf)
+		// enc.SetIndent("", " ")
+		// enc.Encode(ruleSet)
+		// jf.Close()
 
 		tf, _ := os.Create(filepath.Join(outputDir, "geoip-"+code+".txt"))
 		for _, c := range cidrs {

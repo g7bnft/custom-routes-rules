@@ -10,10 +10,7 @@ import (
 	"custom-rules/internal/types"
 )
 
-var categories = []string{"reject", "proxy", "direct"}
-
-// StrategyStage loads the strategy/*.txt add and remove lists and
-// reconciles any conflicts between categories.
+// StrategyStage executes the conflict resolution logic.
 type StrategyStage struct{}
 
 func NewStrategyStage() *StrategyStage {
@@ -30,77 +27,89 @@ func (s *StrategyStage) Execute(ctx *types.BuildContext) error {
 		Rms:  make(map[string]map[string]bool),
 	}
 
-	for _, k := range categories {
-		mods.Adds[k] = loadList(filepath.Join(cfg.StrategyDir, k+".txt"))
+	categories := make([]string, 0, len(cfg.GeositeStrategies))
 
-		rmMap := make(map[string]bool)
-		for _, item := range loadList(filepath.Join(cfg.StrategyDir, k+"-need-to-remove.txt")) {
-			cleanItem := strings.ToLower(strings.TrimSpace(item))
-			if cleanItem != "" {
-				rmMap[cleanItem] = true
-			}
+	for _, k := range cfg.GeositeStrategies {
+		categories = append(categories, k.Name)
+
+		addPath := filepath.Join(cfg.UserStrategyDir, k.Name+".txt")
+		if cleanedDomains, err := loadList(addPath); err == nil {
+			mods.Adds[k.Name] = cleanedDomains
+		} else {
+			fmt.Printf("  [Strategy] couldn't load %s: %v\n", addPath, err)
 		}
-		mods.Rms[k] = rmMap
 
-		fmt.Printf(" └─ Module [%s]: %d adds, %d removals loaded\n", k, len(mods.Adds[k]), len(mods.Rms[k]))
+		rmPath := filepath.Join(cfg.UserStrategyDir, k.Name+"-need-to-remove.txt")
+		if cleanedDomains, err := loadList(rmPath); err == nil {
+			rmMap := make(map[string]bool)
+			for _, domain := range cleanedDomains {
+				rmMap[domain] = true
+			}
+			mods.Rms[k.Name] = rmMap
+		} else {
+			fmt.Printf("  [Strategy] couldn't load %s: %v\n", rmPath, err)
+		}
+
+		fmt.Printf("  [Strategy] %s: %d adds, %d removals loaded\n", k.Name, len(mods.Adds[k.Name]), len(mods.Rms[k.Name]))
 	}
 
-	reconcileConflicts(mods)
+	reconcileConflicts(mods, categories)
 
-	summary := []string{}
-	for _, k := range categories {
-		summary = append(summary, fmt.Sprintf("[%s: %d(+)/%d(-)]", k, len(mods.Adds[k]), len(mods.Rms[k])))
+	summary := make([]string, 0, len(categories))
+	for _, cat := range categories {
+		summary = append(summary, fmt.Sprintf("[%s: %d(+)/%d(-)]", cat, len(mods.Adds[cat]), len(mods.Rms[cat])))
 	}
-	fmt.Println(" └─ Final Strategy: " + strings.Join(summary, " "))
+	fmt.Println("  [Strategy] Final Strategy: " + strings.Join(summary, " "))
 
 	ctx.Mods = mods
 	return nil
 }
 
-func loadList(path string) []string {
+// reconcileConflicts resolves the one real conflict that can occur:
+// the same domain listed in both a category's add and remove file.
+// Remove wins — if you've explicitly marked a domain for exclusion,
+// an add entry for the same domain is treated as stale/contradictory
+// and dropped, with a warning so you can clean up the source file.
+func reconcileConflicts(mods *types.ConfigMods, categories []string) {
+	for _, cat := range categories {
+		rm := mods.Rms[cat]
+		if rm == nil {
+			continue
+		}
+
+		var cleanAdds []string
+		for _, domain := range mods.Adds[cat] {
+			if rm[domain] {
+				fmt.Printf("  [Strategy] %s '%s' is in both add and remove — remove wins, dropped from add\n", cat, domain)
+				continue
+			}
+			cleanAdds = append(cleanAdds, domain)
+		}
+		mods.Adds[cat] = cleanAdds
+	}
+}
+
+func loadList(path string) ([]string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, err // Return the file open error
 	}
 	defer file.Close()
 
 	var clean []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		line := strings.ToLower(strings.TrimSpace(scanner.Text()))
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
 			continue
 		}
-		clean = append(clean, strings.ToLower(line))
+
+		clean = append(clean, line)
 	}
-	return clean
-}
-
-func reconcileConflicts(mods *types.ConfigMods) {
-	claimed := make(map[string]string)
-
-	for _, currentCat := range categories {
-		for _, domain := range mods.Adds[currentCat] {
-			if owner, exists := claimed[domain]; exists {
-				fmt.Printf(" ⚠️ [Conflict] '%s' in %s is IGNORED (already claimed by %s)\n", domain, currentCat, owner)
-				continue
-			}
-			claimed[domain] = currentCat
-
-			if mods.Rms[currentCat][domain] {
-				fmt.Printf(" 🔧 [Self-Clean] Removed '%s' from %s-need-to-remove\n", domain, currentCat)
-				delete(mods.Rms[currentCat], domain)
-			}
-
-			for _, otherCat := range categories {
-				if currentCat == otherCat {
-					continue
-				}
-				if !mods.Rms[otherCat][domain] {
-					fmt.Printf(" 🔗 [Priority] Forced '%s' into %s-need-to-remove (overridden by %s)\n", domain, otherCat, currentCat)
-					mods.Rms[otherCat][domain] = true
-				}
-			}
-		}
+	// Check for scanning errors after the loop ends
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed scanning %s: %w", path, err)
 	}
+
+	return clean, nil
 }

@@ -18,9 +18,12 @@ func (s *GeoipStage) Name() string { return "geoip" }
 func (s *GeoipStage) Execute(ctx *types.BuildContext) error {
 	cfg := ctx.Config
 
-	tags := make([]string, 0, len(cfg.GeoIPTags))
-	for _, t := range cfg.GeoIPTags {
-		tags = append(tags, t.Tag)
+	// Flatten all tags across every GeoIPStrategy into one target list.
+	// No add/remove overrides yet — unlike Geosite, there's no Mods
+	// layer here by design (see note below on where that would plug in).
+	var tags []string
+	for _, strat := range cfg.GeoIPStrategies {
+		tags = append(tags, strat.Tags...)
 	}
 
 	result, err := scanGeoIP(cfg.GeoIPInput, tags)

@@ -1,4 +1,4 @@
-package main
+package geoip
 
 import (
 	"net"
@@ -6,9 +6,11 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 	"github.com/oschwald/maxminddb-golang"
+
+	"custom-rules/internal/types"
 )
 
-func scanGeoIP(path string, targets []string) (*GeoIPResult, error) {
+func scanGeoIP(path string, targets []string) (*types.GeoIPResult, error) {
 	db, err := maxminddb.Open(path)
 	if err != nil {
 		return nil, err
@@ -22,8 +24,8 @@ func scanGeoIP(path string, targets []string) (*GeoIPResult, error) {
 
 	countryMap := make(map[string][]*net.IPNet)
 	networks := db.Networks(maxminddb.SkipAliasedNetworks)
-
 	var record geoip2.Enterprise
+
 	for networks.Next() {
 		subnet, err := networks.Network(&record)
 		if err != nil {
@@ -36,13 +38,14 @@ func scanGeoIP(path string, targets []string) (*GeoIPResult, error) {
 		}
 	}
 
-	return &GeoIPResult{
+	return &types.GeoIPResult{
 		Metadata:   db.Metadata,
 		CountryMap: countryMap,
 	}, networks.Err()
 }
 
-// getBestCode implements "the guy's" robust fallback logic
+// getBestCode implements a robust fallback: country -> registered country
+// -> represented country -> continent.
 func getBestCode(record geoip2.Enterprise) string {
 	if record.Country.IsoCode != "" {
 		return strings.ToLower(record.Country.IsoCode)
@@ -59,8 +62,7 @@ func getBestCode(record geoip2.Enterprise) string {
 	return ""
 }
 
-
-func countTotalIPs(result *GeoIPResult) int {
+func countTotalIPs(result *types.GeoIPResult) int {
 	count := 0
 	for _, nets := range result.CountryMap {
 		count += len(nets)

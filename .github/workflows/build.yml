@@ -9,15 +9,17 @@ on:
       - main
     paths:
       - '**.go'
-      - 'strategy/**'
+      - 'internal/**'
+      - 'userstrategy/**'
+      - 'cmd/**'
       - '.github/workflows/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions: # Explicitly grant write access for releases
+    permissions:
       contents: write
-      
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -25,12 +27,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.27'
 
       - name: Run Builder
         run: |
           go mod tidy
-          go run .
+          go run ./cmd/builder
 
       - name: Update Release
         uses: marvinpinto/action-automatic-releases@latest
@@ -40,7 +42,6 @@ jobs:
           prerelease: false
           title: "Latest Geodata Build"
           files: |
-            output/*.db
-            output/*.dat
-            output/*.srs
-            output/*.txt
+            build/*.db
+            build/*.dat
+            build/*.srs

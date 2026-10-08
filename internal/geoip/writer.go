@@ -102,11 +102,11 @@ func exportIPRuleSets(result *types.GeoIPResult, outputDir string) error {
 		// enc.Encode(ruleSet)
 		// jf.Close()
 
-		tf, _ := os.Create(filepath.Join(outputDir, "geoip-"+code+".txt"))
-		for _, c := range cidrs {
-			tf.WriteString(c + "\n")
-		}
-		tf.Close()
+		// tf, _ := os.Create(filepath.Join(outputDir, "geoip-"+code+".txt"))
+		// for _, c := range cidrs {
+		// 	tf.WriteString(c + "\n")
+		// }
+		// tf.Close()
 	}
 
 	return nil

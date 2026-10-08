@@ -50,3 +50,4 @@ contentful.com
 monad.xyz
 telephony.goog
 vscode-sync.trafficmanager.net
+qichiyu.com

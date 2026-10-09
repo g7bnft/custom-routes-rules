@@ -45,3 +45,4 @@ jobs:
             build/*.db
             build/*.dat
             build/*.srs
+            build/*.txt

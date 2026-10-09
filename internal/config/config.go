@@ -32,7 +32,7 @@ type Config struct {
 // DefaultConfig returns a ready-to-use configuration.
 func DefaultConfig() *Config {
 	// Base GitHub mirror prefix (can be set to "" for direct downloads)
-	mirrorPrefix := "https://gh.jsdelivr.fyi/"
+	mirrorPrefix := ""
 	// assets directory
 	assets := "assets"
 	// Custom output folder
@@ -56,7 +56,7 @@ func DefaultConfig() *Config {
 		// 2. Adding a new tag or a new strategy is done strictly in config
 		GeositeStrategies: []StrategyRule{
 			{Name: "reject", Tags: []string{"category-ads-all", "win-spy"}},
-			{Name: "proxy", Tags: []string{"gfw"}},
+			{Name: "proxy", Tags: []string{"gfw","geolocation-!cn"}},
 			{Name: "direct", Tags: []string{"cn"}},
 		},
 		GeoIPStrategies: []StrategyRule{

@@ -181,18 +181,18 @@ func writeRuleSets(dir string, domainMap map[string][]singeosite.Item) error {
 		// jf.Close()
 
 		// .txt
-		// tf, _ := os.Create(filepath.Join(dir, "geosite-"+code+".txt"))
-		// tbw := bufio.NewWriter(tf)
-		// for _, item := range optimizedItems {
-		// 	if item.Type == singeosite.RuleTypeDomainSuffix {
-		// 		val := strings.TrimPrefix(item.Value, ".")
-		// 		tbw.WriteByte('.')
-		// 		tbw.WriteString(val)
-		// 		tbw.WriteByte('\n')
-		// 	}
-		// }
-		// tbw.Flush()
-		// tf.Close()
+		tf, _ := os.Create(filepath.Join(dir, "geosite-"+code+".txt"))
+		tbw := bufio.NewWriter(tf)
+		for _, item := range optimizedItems {
+			if item.Type == singeosite.RuleTypeDomainSuffix {
+				val := strings.TrimPrefix(item.Value, ".")
+				tbw.WriteByte('.')
+				tbw.WriteString(val)
+				tbw.WriteByte('\n')
+			}
+		}
+		tbw.Flush()
+		tf.Close()
 	}
 
 	return nil

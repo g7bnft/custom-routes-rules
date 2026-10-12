@@ -15,6 +15,14 @@ import (
 // strategy's upstream tags into one entry, applies user Adds/Rms,
 // dedupes, and returns the resulting structured list (unmarshaled —
 // callers decide if/how to serialize it).
+//
+// Implements a unified Priority Cascade (Upstream + User):
+// Categories processed in order (reject > proxy > direct).
+// Each category has U (upstream domains), A (user adds), R (user removes).
+// - Category A (Forced): Domain in A OR (U and not in R) -> claims for this category
+// - Category B (Fallback): Domain in U but caught by R -> evicted, falls to next
+// - Category C (Direct Entry): Missed higher, but in A or (U and not in R)
+// - Category D (Void): Caught by R with no fallback -> dropped
 func BuildPatchedGeoSiteList(ctx *types.BuildContext) (*routercommon.GeoSiteList, error) {
 	fmt.Println("    └─ Patching upstream Geosite database...")
 
@@ -33,17 +41,8 @@ func BuildPatchedGeoSiteList(ctx *types.BuildContext) (*routercommon.GeoSiteList
 		upstreamMap[strings.ToLower(site.CountryCode)] = site
 	}
 
-	// Phase 1: cross-category claim resolution on RAW upstream data only
-	// — no user mods involved yet. Priority = GeositeStrategies order
-	// (reject, proxy, direct). First strategy to see a domain keeps it.
-	claimed := make(map[string]string)
-	type claimedSet struct {
-		strategy string
-		domains []*routercommon.Domain
-	}
-	claimedSets := make([]claimedSet, 0, len(ctx.Config.GeositeStrategies))
-
-	// collect domains by strategy via flatten grouped tags.
+	// Collect upstream domains per strategy (U sets)
+	upstreamDomains := make(map[string][]*routercommon.Domain)
 	for _, strat := range ctx.Config.GeositeStrategies {
 		var raw []*routercommon.Domain
 		for _, tag := range strat.Tags {
@@ -51,67 +50,91 @@ func BuildPatchedGeoSiteList(ctx *types.BuildContext) (*routercommon.GeoSiteList
 				raw = append(raw, upSite.Domain...)
 			}
 		}
+		upstreamDomains[strat.Name] = raw
+	}
 
-		var kept []*routercommon.Domain
-		for _, dom := range raw {
+	// Unified Priority Cascade: Upstream (U) + User Adds (A) + User Removes (R)
+	// Process categories in priority order
+	finalDomains := make(map[string][]*routercommon.Domain)
+	claimed := make(map[string]string) // domain -> owning category
+
+	for _, strat := range ctx.Config.GeositeStrategies {
+		cat := strat.Name
+		uSet := upstreamDomains[cat]  // Upstream domains for this category
+		aSet := ctx.Mods.Adds[cat]    // User adds (pre-cascaded from Strategy Stage)
+		rSet := ctx.Mods.Rms[cat]     // User removes
+
+		// First: Handle upstream domains (U) for this category
+		for _, dom := range uSet {
 			cleanVal := strings.ToLower(strings.TrimSpace(dom.Value))
+
+			// Check if already claimed by higher priority
 			if owner, exists := claimed[cleanVal]; exists {
-				fmt.Printf("    └─ [%s] '%s' skipped — already claimed by [%s] upstream\n", strat.Name, cleanVal, owner)
+				fmt.Printf("    └─ [%s] upstream '%s' skipped — already claimed by [%s]\n", cat, cleanVal, owner)
 				continue
 			}
-			claimed[cleanVal] = strat.Name
-			kept = append(kept, dom)
-		}
-
-		claimedSets = append(claimedSets, claimedSet{strategy: strat.Name, domains: kept})
-	}
-
-	// Phase 2: user Rms/Adds apply per-category, AFTER claiming, with
-	// no further cross-category check — user's explicit config has the
-	// final word, even if it creates duplicates across categories.
-	// That's on the user to resolve, not this function's job to prevent.
-	newList := &routercommon.GeoSiteList{
-		Entry: make([]*routercommon.GeoSite, 0, len(claimedSets)),
-	}
-
-	for _, cs := range claimedSets {
-		rms := ctx.Mods.Rms[cs.strategy]
-		adds := ctx.Mods.Adds[cs.strategy]
-
-		var filtered []*routercommon.Domain
-		removedCount := 0
-		for _, dom := range cs.domains {
-			// rms not configured or rms configured but domain not found in rms
-			// allow to add to keep(filtered).
-			if rms != nil && rms[dom.Value] {
-				removedCount++
+			// Check if this category's remove list has it (Category B: evict)
+			if rSet != nil && rSet[cleanVal] {
+				// Evicted from this category — allow fallback to lower
 				continue
 			}
-			filtered = append(filtered, dom)
+			// Category A: Claim it
+			claimed[cleanVal] = cat
+			if finalDomains[cat] == nil {
+				finalDomains[cat] = []*routercommon.Domain{}
+			}
+			finalDomains[cat] = append(finalDomains[cat], dom)
 		}
 
-		for _, addDomain := range ctx.Mods.Adds[cs.strategy] {
-			filtered = append(filtered, &routercommon.Domain{
+		// Second: Handle user adds (A) for this category
+		for _, addDomain := range aSet {
+			cleanVal := strings.ToLower(strings.TrimSpace(addDomain))
+
+			// Check if already claimed
+			if owner, exists := claimed[cleanVal]; exists {
+				if owner == cat {
+					// Same category: already present from upstream (U), user add is redundant
+					fmt.Printf("    └─ [%s] user add '%s' already present from upstream, skipped\n", cat, cleanVal)
+				} else {
+					// Different category: cross-category interception
+					fmt.Printf("    └─ [%s] user add '%s' intercepted by [%s] (priority), dropped\n", cat, cleanVal, owner)
+				}
+				continue
+			}
+			// Check if this category's remove has it
+			if rSet != nil && rSet[cleanVal] {
+				continue
+			}
+			// Claim it
+			claimed[cleanVal] = cat
+			if finalDomains[cat] == nil {
+				finalDomains[cat] = []*routercommon.Domain{}
+			}
+			finalDomains[cat] = append(finalDomains[cat], &routercommon.Domain{
 				Type:  routercommon.Domain_RootDomain,
-				Value: strings.ToLower(strings.TrimSpace(addDomain)),
+				Value: cleanVal,
 			})
 		}
 
-		final := deduplicateDomains(filtered)
-
-		if removedCount > 0 {
-			fmt.Printf("    └─ [%s] removed %d domain(s) via user remove-list\n", cs.strategy, removedCount)
+		// Process removes: release ownership for fallback to lower categories
+		for domain := range rSet {
+			if claimed[domain] == cat {
+				delete(claimed, domain) // Allow fallback
+			}
+			// If owned by higher priority, keep it (higher priority wins)
 		}
-		if len(adds) > 0 {
-			fmt.Printf("    └─ [%s] added %d domain(s) via user add-list\n", cs.strategy, len(adds))
-		}
+	}
 
+	// Build final GeoSiteList
+	newList := &routercommon.GeoSiteList{Entry: make([]*routercommon.GeoSite, 0, len(ctx.Config.GeositeStrategies))}
+	for _, strat := range ctx.Config.GeositeStrategies {
+		domains := finalDomains[strat.Name]
+		final := deduplicateDomains(domains)
 		newList.Entry = append(newList.Entry, &routercommon.GeoSite{
-			CountryCode: strings.ToUpper(cs.strategy),
+			CountryCode: strings.ToUpper(strat.Name),
 			Domain:      final,
 		})
-
-		fmt.Printf("    └─ Compiled strategy '%s' (%d domains)\n", cs.strategy, len(final))
+		fmt.Printf("    └─ Compiled strategy '%s' (%d domains)\n", strat.Name, len(final))
 	}
 
 	return newList, nil

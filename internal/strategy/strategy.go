@@ -53,7 +53,17 @@ func (s *StrategyStage) Execute(ctx *types.BuildContext) error {
 		fmt.Printf("  [Strategy] %s: %d adds, %d removals loaded\n", k.Name, len(mods.Adds[k.Name]), len(mods.Rms[k.Name]))
 	}
 
-	reconcileConflicts(mods, categories)
+	// Stage 1: Deduplicate adds within each category (user may have duplicates)
+	deduplicateAdds(mods, categories)
+
+	// Stage 2: Check user data contradictions (intra-category: add vs remove)
+	checkUserContradictions(mods, categories)
+
+	// Stage 3: Apply Priority Cascade (cross-category: reject > proxy > direct)
+	applyPriorityCascade(mods, categories)
+
+	// Stage 4: Write back cleaned adds to user files
+	writeBackUserFiles(mods, categories, cfg.UserStrategyDir)
 
 	summary := make([]string, 0, len(categories))
 	for _, cat := range categories {
@@ -65,12 +75,11 @@ func (s *StrategyStage) Execute(ctx *types.BuildContext) error {
 	return nil
 }
 
-// reconcileConflicts resolves the one real conflict that can occur:
-// the same domain listed in both a category's add and remove file.
-// Remove wins — if you've explicitly marked a domain for exclusion,
-// an add entry for the same domain is treated as stale/contradictory
-// and dropped, with a warning so you can clean up the source file.
-func reconcileConflicts(mods *types.ConfigMods, categories []string) {
+// checkUserContradictions handles intra-category conflicts:
+// if a domain is in both Adds[cat] and Rms[cat] for the same category,
+// it's a user configuration error. Remove wins, domain is dropped from adds
+// with a warning.
+func checkUserContradictions(mods *types.ConfigMods, categories []string) {
 	for _, cat := range categories {
 		rm := mods.Rms[cat]
 		if rm == nil {
@@ -80,12 +89,108 @@ func reconcileConflicts(mods *types.ConfigMods, categories []string) {
 		var cleanAdds []string
 		for _, domain := range mods.Adds[cat] {
 			if rm[domain] {
-				fmt.Printf("  [Strategy] %s '%s' is in both add and remove — remove wins, dropped from add\n", cat, domain)
+				fmt.Printf("  [Strategy] WARNING: %s '%s' is in both add and remove — remove wins, dropped from add\n", cat, domain)
 				continue
 			}
 			cleanAdds = append(cleanAdds, domain)
 		}
 		mods.Adds[cat] = cleanAdds
+	}
+}
+
+// applyPriorityCascade implements the cross-category priority waterfall:
+// Categories are processed in order (reject > proxy > direct).
+// - Category A (Forced Route): Domain in Adds[cat] claims it for this category,
+//   stripping from all lower categories' adds.
+// - Category B (Excavation/Fallback): Domain in Rms[cat] is evicted from this
+//   category, allowing fallback to lower categories if they have it in their adds.
+// - Category C (Direct Entry): Domain not claimed by higher categories, but in
+//   this category's adds, securely populates this category.
+// - Category D (Void): Domain caught by remove list with no fallback/add in
+//   subsequent routes is completely pruned.
+func applyPriorityCascade(mods *types.ConfigMods, categories []string) {
+	// finalOwners tracks which category ultimately owns each domain
+	finalOwners := make(map[string]string) // domain -> owning category name
+
+	for _, cat := range categories {
+		adds := mods.Adds[cat]
+		rms := mods.Rms[cat]
+
+		// Process adds for this category
+		var cleanAdds []string
+		for _, domain := range adds {
+			// Check if already owned by higher priority category
+			if owner, exists := finalOwners[domain]; exists {
+				// Category A: higher priority owns it
+				fmt.Printf("  [Strategy] %s '%s' intercepted by %s (priority), dropped\n", cat, domain, owner)
+				continue
+			}
+			// Check if this category's own remove list has it
+			// (intra-category contradiction already handled by checkUserContradictions,
+			// but defense in depth)
+			if rms != nil && rms[domain] {
+				// This category's remove wins - don't add, allow fallback
+				continue
+			}
+			// This category claims it
+			finalOwners[domain] = cat
+			cleanAdds = append(cleanAdds, domain)
+		}
+		mods.Adds[cat] = cleanAdds
+
+		// Process removes: these domains are EXPLICITLY REMOVED from this category
+		// If this category owned them, release ownership (allow fallback to lower)
+		// If higher category owned them, higher category still owns them (already processed)
+		for domain := range rms {
+			if finalOwners[domain] == cat {
+				delete(finalOwners, domain) // Release for fallback
+			}
+			// If owned by higher priority, keep it (higher priority wins)
+		}
+	}
+
+	// After cascade, all categories' Adds are cleaned.
+	// Removes stay as-is for Geosite Patch Stage to apply against upstream.
+}
+
+// writeBackUserFiles writes the post-cascade adds back to user strategy files.
+func writeBackUserFiles(mods *types.ConfigMods, categories []string, userStrategyDir string) {
+	for _, cat := range categories {
+		addPath := filepath.Join(userStrategyDir, cat+".txt")
+		adds := mods.Adds[cat]
+
+		// Write cleaned adds back to file
+		var lines []string
+		for _, domain := range adds {
+			lines = append(lines, domain)
+		}
+		content := strings.Join(lines, "\n")
+		if content != "" {
+			content += "\n" // trailing newline
+		}
+
+		if err := os.WriteFile(addPath, []byte(content), 0644); err != nil {
+			fmt.Printf("  [Strategy] WARNING: failed to write back %s: %v\n", addPath, err)
+			continue
+		}
+		fmt.Printf("  [Strategy] Wrote back %d domains to %s\n", len(adds), addPath)
+	}
+}
+
+// deduplicateAdds removes duplicate domains within each category's add list.
+func deduplicateAdds(mods *types.ConfigMods, categories []string) {
+	for _, cat := range categories {
+		seen := make(map[string]bool)
+		var unique []string
+		for _, domain := range mods.Adds[cat] {
+			if !seen[domain] {
+				seen[domain] = true
+				unique = append(unique, domain)
+			} else {
+				fmt.Printf("  [Strategy] WARNING: %s duplicate add '%s' removed\n", cat, domain)
+			}
+		}
+		mods.Adds[cat] = unique
 	}
 }
 

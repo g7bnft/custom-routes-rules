@@ -56,7 +56,7 @@ func DefaultConfig() *Config {
 		// 2. Adding a new tag or a new strategy is done strictly in config
 		GeositeStrategies: []StrategyRule{
 			{Name: "reject", Tags: []string{"category-ads-all", "win-spy"}},
-			{Name: "proxy", Tags: []string{"gfw","geolocation-!cn"}},
+			{Name: "proxy", Tags: []string{"gfw"}},
 			{Name: "direct", Tags: []string{"cn"}},
 		},
 		GeoIPStrategies: []StrategyRule{

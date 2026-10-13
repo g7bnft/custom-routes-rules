@@ -184,6 +184,8 @@ func BuildPatchedGeoSiteList(ctx *types.BuildContext) (*routercommon.GeoSiteList
 	newList := &routercommon.GeoSiteList{Entry: make([]*routercommon.GeoSite, 0, len(ctx.Config.GeositeStrategies))}
 	for _, strat := range ctx.Config.GeositeStrategies {
 		domains := finalDomains[strat.Name]
+		// Apply semantic redundancy optimization: remove subdomains covered by RootDomain
+		domains = removeSemanticRedundancy(domains)
 		final := deduplicateDomains(domains)
 		newList.Entry = append(newList.Entry, &routercommon.GeoSite{
 			CountryCode: strings.ToUpper(strat.Name),
@@ -216,4 +218,72 @@ func deduplicateDomains(domains []*routercommon.Domain) []*routercommon.Domain {
 		// else: duplicate — dropped
 	}
 	return unique
+}
+
+// removeSemanticRedundancy removes domains that are semantically covered by RootDomain entries.
+// A RootDomain "example.com" covers itself and all subdomains (www.example.com, api.www.example.com, etc.).
+// This optimization runs at the V2Ray protobuf level, before sing-box export.
+func removeSemanticRedundancy(domains []*routercommon.Domain) []*routercommon.Domain {
+	if len(domains) == 0 {
+		return domains
+	}
+
+	// Collect all RootDomain values as a suffix lookup set
+	rootDomainSuffixes := make(map[string]struct{}, len(domains))
+	for _, d := range domains {
+		if d.Type == routercommon.Domain_RootDomain {
+			val := strings.ToLower(strings.TrimSpace(d.Value))
+			if val != "" {
+				rootDomainSuffixes[val] = struct{}{}
+			}
+		}
+	}
+
+	if len(rootDomainSuffixes) == 0 {
+		return domains // No RootDomain entries, nothing to optimize
+	}
+
+	var result []*routercommon.Domain
+	removed := 0
+
+	for _, d := range domains {
+		val := strings.ToLower(strings.TrimSpace(d.Value))
+		if val == "" {
+			continue
+		}
+
+		// RootDomain entries are never removed (they are the covering rules)
+		if d.Type == routercommon.Domain_RootDomain {
+			result = append(result, d)
+			continue
+		}
+
+		// For Full, Plain, Regex: check if covered by any RootDomain suffix
+		// Note: Plain (keyword) and Regex have different semantics, but if they appear
+		// as exact domain values, we can check containment
+		covered := false
+		if d.Type == routercommon.Domain_Full || d.Type == routercommon.Domain_Plain {
+			// Check if this exact value or any parent is a RootDomain
+			parts := strings.Split(val, ".")
+			for i := 0; i < len(parts); i++ {
+				parent := strings.Join(parts[i:], ".")
+				if _, exists := rootDomainSuffixes[parent]; exists {
+					covered = true
+					removed++
+					break
+				}
+			}
+		}
+		// Regex type: skip semantic check (different semantics)
+
+		if !covered {
+			result = append(result, d)
+		}
+	}
+
+	if removed > 0 {
+		fmt.Printf("    └─ Semantic redundancy: removed %d subdomain entries covered by RootDomain\n", removed)
+	}
+
+	return result
 }

@@ -51,3 +51,6 @@ monad.xyz
 telephony.goog
 vscode-sync.trafficmanager.net
 qichiyu.com
+nvcr.io
+nvidia.com
+jfrog.io
